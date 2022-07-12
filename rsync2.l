@@ -8,7 +8,7 @@
     
   }#
   
-  (let ((Weak-Remote . Strong-Remote) Remote-Signatures # blockchecksums
+  (let ((Weak-Remote . Strong-Remote) Remote-Signatures # <- blockchecksums
         Match T
         Match-Block -1
         Deltas () # deque
@@ -21,8 +21,10 @@
         # Whenever there is a match or the loop is running for the first
         # time, populate the window using weakchecksum instead of rolling
         # through every single byte which takes at least twice as long. 
+        
         (for X (cut Blocksize 'Data) (fifo 'Window X))
-        (let ((X Y Z) (weakchecksum Window)) (setq Checksum X A Y B Z)))
+        (let ((X Y Z) (weakchecksum Window)) 
+          (setq Checksum X A Y B Z)))
 
       # python index = element start end
 
@@ -31,10 +33,11 @@
       # be missed and the data sent over. May fix eventually, but this
       # problem arises very rarely.                
       
-      # element # end
-      (let (Match-Weak (index Weak-Remote checksum (+ Match-Block 1))
-            Match-Strong (index Strong-Remote (md5 Window) Match-Block))
+      (let (Match-Weak (setq Match-Block (index Checksum (nth Weak-Remote (+ Match-Block 1))))
+            Match-Strong (setq Match-Block (index (md5 Window) (nth Strong-Remote Match-Block))))
+            
         (if (and Match-Weak Match-Strong)
+        
             (prog
               (setq Match T)
               # push to end of deltas
@@ -44,6 +47,7 @@
             (setq Match NIL)
             
             (let Byte (pop 'Data)
+            
               (if Byte 
                   (push 'Window Byte)
                   (setq 
@@ -51,25 +55,28 @@
                     Tail-Size (% (length Data) Blocksize))
                     Data NIL))
 
-            (if (and (not Data) (<= (length Window) Tail-Size))
-            
-                # The likelihood that any blocks will match after this is
-                # nearly nil so call it quits.            
-                (fifo 'Deltas Window)
-                # break loop
+              (if (and 
+                    (not Data) 
+                    (<= (length Window) Tail-Size))
 
-                # Yank off the extra byte and calculate the new window checksum
-                (setq Old (fifo 'Window)) # popleft
-                (let ((X Y Z) (rollingchecksum Old Byte A B Blocksize)) (setq Checksum X A Y B Z))
+                  # The likelihood that any blocks will match after this is
+                  # nearly nil so call it quits.            
+                  (fifo 'Deltas Window)
+                  # break loop
 
-                # Add the old byte the file delta. This is data that was not found
-                # inside of a matching block so it needs to be sent to the target.
-                # try: deltaqueue[-1].append(oldbyte)
-                # except (AttributeError, IndexError): deltaqueue.append([oldbyte])              
-                
-                (if (last Deltas)
-                    (push @ Old)
-                    (fifo 'Deltas Old))))))
+                  # Yank off the extra byte and calculate the new window checksum
+                  (setq Old (fifo 'Window)) # popleft
+                  (let ((X Y Z) (rollingchecksum Old Byte A B Blocksize)) 
+                    (setq Checksum X A Y B Z))
+
+                  # Add the old byte the file delta. This is data that was not found
+                  # inside of a matching block so it needs to be sent to the target.
+                  # try: deltaqueue[-1].append(oldbyte)
+                  # except (AttributeError, IndexError): deltaqueue.append([oldbyte])              
+
+                  (if (last Deltas)
+                      (conc @ (cons Old))
+                      (fifo 'Deltas Old)))))))
            
     # Return a delta that starts with the blocksize and 
     # converts all iterables to bytes.
@@ -88,10 +95,8 @@
     defined size for the given data stream.
     
   }#  
-  (let (Weak ()
-        Strong ()
-        Block NIL)
-    (while (setq Block (head Blocksize In))
+  (use (Weak Strong Block)
+    (while (setq Block (cut Blocksize 'In))
       (push 'Weak (car (weakchecksum Block)))
       (push 'Strong (md5 Block)))
     (cons
@@ -136,3 +141,8 @@
       (inc 'A X)
       (inc 'B (* (- L I) X)))
     (list (| (>> -16 B) A) A B)))
+
+(let Str "The quick brown fox jumped over the lazy dog's back"
+   (pack
+      (mapcar '((B) (pad 2 (hex B)))
+         (native "libcrypto.so" "MD5" '(B . 16) Str (length Str) '(NIL (16))) ) ) )
